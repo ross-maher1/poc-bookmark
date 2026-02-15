@@ -1,30 +1,12 @@
 /**
- * Core type definitions for the app.
- *
- * Define all shared types here. Use discriminated unions for items
- * that can be multiple types.
- *
- * Example:
- *
- * export type Item = {
- *   id: string;
- *   title: string;
- *   createdAt: string;
- * };
- *
- * export type ListItem = Item | Divider;
- *
- * export type Divider = {
- *   id: string;
- *   isDivider: true;
- *   label: string;
- * };
+ * Core type definitions for the Bookmarks app.
  */
 
-// Placeholder type - replace with your app's types
-export type Item = {
+export type Bookmark = {
   id: string;
+  user_id: string;
+  url: string;
   title: string;
-  description: string;
-  createdAt: string;
+  created_at: string;
+  updated_at: string;
 };

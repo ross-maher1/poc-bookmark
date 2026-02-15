@@ -15,9 +15,9 @@
  * };
  */
 
-export const APP_NAME = "Mini App";
+export const APP_NAME = "Bookmarks";
 
 export const STORAGE_KEYS = {
-  items: "mini_app_items",
-  settings: "mini_app_settings",
+  items: "bookmark_app_items",
+  settings: "bookmark_app_settings",
 } as const;

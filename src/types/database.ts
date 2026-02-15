@@ -1,8 +1,8 @@
 /**
  * Database Types
  *
- * Shared types for the unified user model (profiles table).
- * Add your app-specific table types below the profiles section.
+ * Shared types for the unified user model (profiles table)
+ * plus app-specific tables.
  */
 
 // ============================================================================
@@ -40,9 +40,32 @@ export interface ProfileUpdate {
 }
 
 // ============================================================================
-// DATABASE SCHEMA TYPE (for Supabase typed client)
+// BOOKMARKS
 // ============================================================================
-// Add your app-specific tables here.
+
+export interface BookmarkRow {
+  id: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+  url: string;
+  title: string;
+}
+
+export interface BookmarkInsert {
+  user_id: string;
+  url: string;
+  title: string;
+}
+
+export interface BookmarkUpdate {
+  url?: string;
+  title?: string;
+}
+
+// ============================================================================
+// DATABASE SCHEMA TYPE
+// ============================================================================
 
 export interface Database {
   public: {
@@ -52,12 +75,11 @@ export interface Database {
         Insert: ProfileInsert;
         Update: ProfileUpdate;
       };
-      // Add app-specific tables:
-      // items: {
-      //   Row: Item;
-      //   Insert: ItemInsert;
-      //   Update: ItemUpdate;
-      // };
+      bookmarks: {
+        Row: BookmarkRow;
+        Insert: BookmarkInsert;
+        Update: BookmarkUpdate;
+      };
     };
   };
 }

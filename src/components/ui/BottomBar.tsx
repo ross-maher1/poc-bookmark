@@ -2,15 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, List, Plus, Settings } from "lucide-react";
+import { Home, Bookmark, Plus, Settings } from "lucide-react";
 
 /**
  * Navigation items for the bottom bar.
- * Update this array with your app's routes.
  */
 const navItems = [
   { href: "/", icon: Home, label: "Home" },
-  { href: "/items", icon: List, label: "Items" },
+  { href: "/bookmarks", icon: Bookmark, label: "Bookmarks" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
