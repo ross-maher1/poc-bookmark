@@ -237,13 +237,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return;
     setState((prev) => ({ ...prev, loading: true }));
     await supabase.auth.signOut();
-    setState({
-      user: null,
-      session: null,
-      profile: null,
-      loading: false,
-      error: null,
-    });
+    // Hard redirect to trigger middleware — client-side state reset alone
+    // won't redirect away from protected routes.
+    window.location.href = "/auth/login";
   }, [supabase]);
 
   const resetPassword = useCallback(
