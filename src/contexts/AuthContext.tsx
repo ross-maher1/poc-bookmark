@@ -15,41 +15,58 @@ import type {
   AuthChangeEvent,
 } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import type { Profile } from "@/types/database";
 
-interface Profile {
-  id: string;
+// ============================================================================
+// TYPES
+// ============================================================================
+
+export interface SignInCredentials {
   email: string;
-  full_name: string | null;
-  subscription_tier: "free" | "premium";
-  onboarding_completed: boolean;
-  preferences: Record<string, unknown> | null;
+  password: string;
 }
 
-interface AuthContextValue {
+export interface SignUpCredentials {
+  email: string;
+  password: string;
+  fullName?: string;
+}
+
+export interface AuthState {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  signIn: (credentials: {
-    email: string;
-    password: string;
-  }) => Promise<{ error: AuthError | null }>;
-  signUp: (credentials: {
-    email: string;
-    password: string;
-    fullName?: string;
-  }) => Promise<{ error: AuthError | null }>;
+  error: AuthError | Error | null;
+}
+
+export interface AuthContextValue extends AuthState {
+  signIn: (credentials: SignInCredentials) => Promise<{ error: AuthError | null }>;
+  signUp: (credentials: SignUpCredentials) => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+  updatePassword: (password: string) => Promise<{ error: AuthError | null }>;
+  refreshProfile: () => Promise<void>;
 }
+
+// ============================================================================
+// CONTEXT
+// ============================================================================
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
+// ============================================================================
+// PROVIDER
+// ============================================================================
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<AuthState>({
+    user: null,
+    session: null,
+    profile: null,
+    loading: true,
+    error: null,
+  });
 
   const supabase = useMemo(() => {
     try {
@@ -60,85 +77,157 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const fetchProfile = useCallback(
-    async (userId: string) => {
+    async (userId: string): Promise<Profile | null> => {
       if (!supabase) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-      return data as Profile | null;
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+
+        if (error) {
+          console.error("Error fetching profile:", error);
+          return null;
+        }
+
+        return data;
+      } catch (err) {
+        console.error("Error fetching profile:", err);
+        return null;
+      }
     },
     [supabase]
   );
 
+  const refreshProfile = useCallback(async () => {
+    if (!state.user) return;
+    const profile = await fetchProfile(state.user.id);
+    setState((prev) => ({ ...prev, profile }));
+  }, [state.user, fetchProfile]);
+
   useEffect(() => {
     if (!supabase) {
-      setLoading(false);
+      setState((prev) => ({ ...prev, loading: false }));
       return;
     }
 
-    const initSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      const currentSession = data.session;
-      setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      if (currentSession?.user) {
-        const userProfile = await fetchProfile(currentSession.user.id);
-        setProfile(userProfile);
+    const initializeAuth = async () => {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error) {
+          setState((prev) => ({ ...prev, error, loading: false }));
+          return;
+        }
+
+        if (session?.user) {
+          const profile = await fetchProfile(session.user.id);
+          setState({
+            user: session.user,
+            session,
+            profile,
+            loading: false,
+            error: null,
+          });
+        } else {
+          setState({
+            user: null,
+            session: null,
+            profile: null,
+            loading: false,
+            error: null,
+          });
+        }
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          error:
+            err instanceof Error ? err : new Error("Failed to initialize auth"),
+          loading: false,
+        }));
       }
-      setLoading(false);
     };
-    initSession();
+
+    initializeAuth();
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(
       async (_event: AuthChangeEvent, session: Session | null) => {
-        setSession(session);
-        setUser(session?.user ?? null);
         if (session?.user) {
           const profile = await fetchProfile(session.user.id);
-          setProfile(profile);
+          setState({
+            user: session.user,
+            session,
+            profile,
+            loading: false,
+            error: null,
+          });
         } else {
-          setProfile(null);
+          setState({
+            user: null,
+            session: null,
+            profile: null,
+            loading: false,
+            error: null,
+          });
         }
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [supabase, fetchProfile]);
 
   const signIn = useCallback(
-    async ({ email, password }: { email: string; password: string }) => {
-      if (!supabase)
-        return { error: new Error("Not initialized") as AuthError };
+    async ({ email, password }: SignInCredentials) => {
+      if (!supabase) {
+        const error = new Error("Supabase not initialized") as AuthError;
+        return { error };
+      }
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
+
+      if (error) {
+        setState((prev) => ({ ...prev, loading: false, error }));
+      }
+
       return { error };
     },
     [supabase]
   );
 
   const signUp = useCallback(
-    async ({
-      email,
-      password,
-      fullName,
-    }: {
-      email: string;
-      password: string;
-      fullName?: string;
-    }) => {
-      if (!supabase)
-        return { error: new Error("Not initialized") as AuthError };
+    async ({ email, password, fullName }: SignUpCredentials) => {
+      if (!supabase) {
+        const error = new Error("Supabase not initialized") as AuthError;
+        return { error };
+      }
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: {
+            full_name: fullName,
+          },
+        },
       });
+
+      if (error) {
+        setState((prev) => ({ ...prev, loading: false, error }));
+      }
+
       return { error };
     },
     [supabase]
@@ -146,13 +235,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (!supabase) return;
+    setState((prev) => ({ ...prev, loading: true }));
     await supabase.auth.signOut();
+    setState({
+      user: null,
+      session: null,
+      profile: null,
+      loading: false,
+      error: null,
+    });
   }, [supabase]);
 
   const resetPassword = useCallback(
     async (email: string) => {
-      if (!supabase)
-        return { error: new Error("Not initialized") as AuthError };
+      if (!supabase) {
+        const error = new Error("Supabase not initialized") as AuthError;
+        return { error };
+      }
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/auth/reset-password`,
       });
@@ -161,20 +260,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [supabase]
   );
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        profile,
-        loading,
-        signIn,
-        signUp,
-        signOut,
-        resetPassword,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const updatePassword = useCallback(
+    async (password: string) => {
+      if (!supabase) {
+        const error = new Error("Supabase not initialized") as AuthError;
+        return { error };
+      }
+      const { error } = await supabase.auth.updateUser({ password });
+      return { error };
+    },
+    [supabase]
   );
+
+  const value: AuthContextValue = {
+    ...state,
+    signIn,
+    signUp,
+    signOut,
+    resetPassword,
+    updatePassword,
+    refreshProfile,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
